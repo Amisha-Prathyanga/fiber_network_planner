@@ -47,10 +47,8 @@
        it actually wins. Every child below then sizes to 100% of this
        fixed parent instead of guessing its own vw width.
        --------------------------------------------------------------------- */
-    calcite-panel[slot="top-right"],
-    calcite-panel[slot="bottom-right"] {
-      /* Theme via real Calcite design tokens — cascades to every
-         descendant control (buttons, switches, lists) automatically. */
+    /* Floating draggable panel shared styles */
+    .floating-panel {
       --calcite-color-brand: var(--fibre-primary);
       --calcite-color-brand-hover: var(--fibre-primary-dark);
       --calcite-color-brand-press: var(--fibre-primary-dark);
@@ -60,13 +58,88 @@
       --calcite-color-text-2: var(--fibre-text-muted);
       --calcite-color-border-1: var(--fibre-border);
       --calcite-color-border-2: var(--fibre-border);
-      width: 380px !important;
-      max-width: 92vw !important;
-      flex: 0 0 auto !important;
+      position: absolute;
+      width: 380px;
+      max-width: 92vw;
       border-radius: var(--fibre-radius);
       box-shadow: 0 14px 34px rgba(10, 40, 60, 0.22);
-      margin: 6px;
+      z-index: 10;
+      user-select: none;
+      transition: box-shadow 0.15s ease;
     }
+
+    .floating-panel.dragging {
+      box-shadow: 0 24px 52px rgba(10, 40, 60, 0.38);
+      opacity: 0.96;
+    }
+
+    /* Drag handle — the panel header becomes the grab handle */
+    .floating-panel .drag-handle {
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(120deg, var(--fibre-primary-dark), var(--fibre-primary));
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: var(--fibre-radius) var(--fibre-radius) 0 0;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      box-shadow: inset 0 -1px 0 rgba(0,0,0,0.12);
+    }
+
+    .floating-panel .drag-handle:active {
+      cursor: grabbing;
+    }
+
+    .floating-panel .drag-handle .drag-icon {
+      font-size: 16px;
+      opacity: 0.7;
+      flex-shrink: 0;
+    }
+
+    .floating-panel .drag-handle .panel-title-text {
+      flex: 1;
+    }
+
+    .floating-panel .drag-handle .panel-title-text span {
+      display: block;
+      font-size: 11px;
+      font-weight: 400;
+      opacity: 0.82;
+      margin-top: 1px;
+    }
+
+    .floating-panel .panel-body {
+      background: var(--fibre-surface);
+      border-radius: 0 0 var(--fibre-radius) var(--fibre-radius);
+      overflow: hidden;
+    }
+
+    /* Collapse toggle button */
+    .floating-panel .collapse-btn {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.85);
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 6px;
+      font-size: 16px;
+      line-height: 1;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    .floating-panel .collapse-btn:hover {
+      background: rgba(255,255,255,0.18);
+    }
+
+    .floating-panel .panel-body.collapsed {
+      display: none;
+    }
+
+    #panel-route { top: 10px; right: 10px; }
+    #panel-saved { top: 10px; right: 410px; }
 
     /* Only the two independently-scrolling lists get a height cap +
        scrollbar — never the panel itself, so nothing gets silently
@@ -108,11 +181,23 @@
       font-weight: 600;
     }
 
+    /* The calcite-panel inside the floating card must not grow taller than
+       the viewport — cap it and let its inner content scroll instead of
+       stretching buttons to fill space. */
+    #body-route calcite-panel {
+      max-height: 70vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* nearestFdpPanel must be a normal block — never a flex child that stretches */
     #nearestFdpPanel {
       display: none;
-      padding: 12px 16px;
+      padding: 12px 16px 4px;
       width: 100%;
       box-sizing: border-box;
+      flex: 0 0 auto;        /* never grow or shrink inside the panel flex column */
     }
 
     #nearestFdpResult {
@@ -153,9 +238,22 @@
       color: var(--fibre-text-muted);
     }
 
+
     #saveNearestBtn {
-      max-width: 100%;
+      display: block;
+      width: calc(100% - 32px) !important;  /* match the 16px padding on each side */
+      margin: 0 16px 12px !important;
+      max-height: 2.5rem !important;
+      height: 2.5rem !important;
       box-sizing: border-box;
+      flex: 0 0 auto;
+    }
+
+    /* Prevent Calcite button's internal button element from stretching */
+    #saveNearestBtn::part(button) {
+      height: 100%;
+      min-height: 0;
+      padding-block: 0;
     }
 
     .hint {
@@ -185,8 +283,11 @@
     .footer-row {
       display: flex;
       gap: 10px;
-      padding: 14px 16px;
-      border-top: 1px solid var(--fibre-border);
+      padding: 12px 16px;
+      border-top: 2px solid var(--fibre-border);
+      background: var(--fibre-surface);
+      flex: 0 0 auto;    /* never let footer shrink or be pushed off-screen */
+      margin-top: auto;  /* push to the natural bottom of flow */
     }
 
     .footer-row calcite-button {
@@ -285,101 +386,117 @@
   </header>
 
   <div class="map-wrap">
-  <arcgis-map basemap="arcgis/navigation" center="79.858, 6.893" zoom="13">
+    <arcgis-map basemap="arcgis/navigation" center="79.858, 6.893" zoom="13">
+      <arcgis-search slot="top-left"></arcgis-search>
+      <arcgis-zoom slot="top-left"></arcgis-zoom>
+      <arcgis-locate slot="top-left"></arcgis-locate>
+      <arcgis-compass slot="top-left"></arcgis-compass>
+      <arcgis-expand slot="bottom-left" expand-icon="basemap" expand-tooltip="Change basemap">
+        <arcgis-basemap-gallery></arcgis-basemap-gallery>
+      </arcgis-expand>
+      <arcgis-fullscreen slot="bottom-left"></arcgis-fullscreen>
+    </arcgis-map>
 
-    <arcgis-search slot="top-left"></arcgis-search>
-    <arcgis-zoom slot="top-left"></arcgis-zoom>
-    <arcgis-locate slot="top-left"></arcgis-locate>
-    <arcgis-compass slot="top-left"></arcgis-compass>
-
-    <arcgis-expand slot="bottom-left" expand-icon="basemap" expand-tooltip="Change basemap">
-      <arcgis-basemap-gallery></arcgis-basemap-gallery>
-    </arcgis-expand>
-    <arcgis-fullscreen slot="bottom-left"></arcgis-fullscreen>
-
-    <calcite-panel slot="top-right" heading="Route a fibre path" width-scale="m"
-      description="Click the map to trace, compare, and save fibre paths across your network."
-      collapsible>
-      <calcite-icon slot="header-actions-start" icon="pin-tear" scale="m"></calcite-icon>
-
-      <div class="mode-row">
-        <calcite-segmented-control id="modeControl" width="full">
-          <calcite-segmented-control-item value="two-point" icon-start="pin-plus" checked>Two-point</calcite-segmented-control-item>
-          <calcite-segmented-control-item value="multi-stop" icon-start="collection">Multi-stop</calcite-segmented-control-item>
-          <calcite-segmented-control-item value="nearest-fdp" icon-start="search">Nearest FDP</calcite-segmented-control-item>
-        </calcite-segmented-control>
-      </div>
-
-      <calcite-notice id="directions-notice" icon="driving-distance" open>
-        <div slot="message">Click on the map in two different locations to solve the route.</div>
-      </calcite-notice>
-
-      <calcite-button id="solveMultiBtn" width="full" style="display:none; margin: 0 12px 8px; width: calc(100% - 24px);" disabled>
-        Solve optimized route (0 stops)
-      </calcite-button>
-
-      <div id="directions-container"></div>
-
-      <div id="nearestFdpPanel">
-        <div id="nearestFdpDistance" style="display:none;">
-          <span class="distance-value" id="nearestFdpDistanceValue"></span>
-          <span class="distance-label">to nearest FDP</span>
+    <!-- ===== Floating Draggable Panel: Route a fibre path ===== -->
+    <div class="floating-panel" id="panel-route">
+      <div class="drag-handle" id="drag-route">
+        <span class="drag-icon">⠿</span>
+        <div class="panel-title-text">
+          Route a fibre path
+          <span>Click the map to trace, compare, and save fibre paths.</span>
         </div>
-        <div id="nearestFdpResult"></div>
-        <calcite-list id="fdpRankList"></calcite-list>
-        <calcite-button id="saveNearestBtn" width="full" style="display:none; margin-top:8px;">Save nearest path to network</calcite-button>
+        <button class="collapse-btn" data-target="body-route" title="Collapse">▲</button>
       </div>
+      <div class="panel-body" id="body-route">
+        <calcite-panel heading="" width-scale="m">
+          <div class="mode-row">
+            <calcite-segmented-control id="modeControl" width="full">
+              <calcite-segmented-control-item value="two-point" icon-start="pin-plus" checked>Two-point</calcite-segmented-control-item>
+              <calcite-segmented-control-item value="multi-stop" icon-start="collection">Multi-stop</calcite-segmented-control-item>
+              <calcite-segmented-control-item value="nearest-fdp" icon-start="search">Nearest FDP</calcite-segmented-control-item>
+            </calcite-segmented-control>
+          </div>
 
-      <div id="saveForm">
-        <calcite-label>
-          Label
-          <calcite-input id="pathLabel" placeholder="e.g. Fort–Bambalapitiya trunk"></calcite-input>
-        </calcite-label>
-        <calcite-label>
-          Cable type
-          <calcite-select id="pathType">
-            <calcite-option value="backbone">Backbone</calcite-option>
-            <calcite-option value="distribution" selected>Distribution</calcite-option>
-            <calcite-option value="drop">Drop</calcite-option>
-          </calcite-select>
-        </calcite-label>
-        <calcite-button id="saveRouteBtn" width="full">Save this path to the network</calcite-button>
+          <calcite-notice id="directions-notice" icon="driving-distance" open>
+            <div slot="message">Click on the map in two different locations to solve the route.</div>
+          </calcite-notice>
+
+          <calcite-button id="solveMultiBtn" width="full" style="display:none; margin: 0 12px 8px; width: calc(100% - 24px);" disabled>
+            Solve optimized route (0 stops)
+          </calcite-button>
+
+          <div id="directions-container"></div>
+
+          <div id="nearestFdpPanel">
+            <div id="nearestFdpDistance" style="display:none;">
+              <span class="distance-value" id="nearestFdpDistanceValue"></span>
+              <span class="distance-label">to nearest FDP</span>
+            </div>
+            <div id="nearestFdpResult"></div>
+            <calcite-list id="fdpRankList"></calcite-list>
+            <calcite-button id="saveNearestBtn" style="display:none; margin-top:8px;">Save nearest path to network</calcite-button>
+          </div>
+
+          <div id="saveForm">
+            <calcite-label>
+              Label
+              <calcite-input id="pathLabel" placeholder="e.g. Fort–Bambalapitiya trunk"></calcite-input>
+            </calcite-label>
+            <calcite-label>
+              Cable type
+              <calcite-select id="pathType">
+                <calcite-option value="backbone">Backbone</calcite-option>
+                <calcite-option value="distribution" selected>Distribution</calcite-option>
+                <calcite-option value="drop">Drop</calcite-option>
+              </calcite-select>
+            </calcite-label>
+            <calcite-button id="saveRouteBtn" width="full">Save this path to the network</calcite-button>
+          </div>
+
+          <div class="footer-row">
+            <calcite-button id="clearBtn" appearance="outline">Clear current</calcite-button>
+          </div>
+        </calcite-panel>
       </div>
+    </div>
 
-      <div class="footer-row">
-        <calcite-button id="clearBtn" appearance="outline">Clear current</calcite-button>
+    <!-- ===== Floating Draggable Panel: Saved fibre network ===== -->
+    <div class="floating-panel" id="panel-saved">
+      <div class="drag-handle" id="drag-saved">
+        <span class="drag-icon">⠿</span>
+        <div class="panel-title-text">
+          Saved fibre network
+          <span>Review, export, import, or clear saved paths.</span>
+        </div>
+        <button class="collapse-btn" data-target="body-saved" title="Collapse">▲</button>
       </div>
+      <div class="panel-body" id="body-saved">
+        <calcite-panel heading="" width-scale="m">
+          <calcite-action slot="header-actions-end" icon="download" text="Export" id="exportBtn"></calcite-action>
+          <calcite-action slot="header-actions-end" icon="upload" text="Import" id="importBtn"></calcite-action>
+          <input type="file" id="importFile" accept="application/json" style="display:none;">
 
-    </calcite-panel>
+          <div class="mode-row">
+            <calcite-label layout="inline">
+              <calcite-switch id="showSavedSwitch" checked></calcite-switch>
+              Show saved network on map
+            </calcite-label>
+            <calcite-label layout="inline">
+              <calcite-switch id="showFdpSwitch" checked></calcite-switch>
+              Show sample FDPs on map
+            </calcite-label>
+          </div>
 
-    <calcite-panel slot="bottom-right" heading="Saved fibre network" width-scale="m"
-      description="Review, export, import, or clear the paths you've already saved."
-      collapsible>
-      <calcite-icon slot="header-actions-start" icon="layers" scale="m"></calcite-icon>
-      <calcite-action slot="header-actions-end" icon="download" text="Export" id="exportBtn"></calcite-action>
-      <calcite-action slot="header-actions-end" icon="upload" text="Import" id="importBtn"></calcite-action>
-      <input type="file" id="importFile" accept="application/json" style="display:none;">
+          <div id="networkStats">0 paths saved · 0.00 mi total</div>
+          <calcite-list id="savedList"></calcite-list>
 
-      <div class="mode-row">
-        <calcite-label layout="inline">
-          <calcite-switch id="showSavedSwitch" checked></calcite-switch>
-          Show saved network on map
-        </calcite-label>
-        <calcite-label layout="inline">
-          <calcite-switch id="showFdpSwitch" checked></calcite-switch>
-          Show sample FDPs on map
-        </calcite-label>
+          <div class="footer-row">
+            <calcite-button id="clearAllBtn" appearance="outline" kind="danger">Clear saved network</calcite-button>
+          </div>
+        </calcite-panel>
       </div>
+    </div>
 
-      <div id="networkStats">0 paths saved · 0.00 mi total</div>
-      <calcite-list id="savedList"></calcite-list>
-
-      <div class="footer-row">
-        <calcite-button id="clearAllBtn" appearance="outline" kind="danger">Clear saved network</calcite-button>
-      </div>
-    </calcite-panel>
-
-  </arcgis-map>
   </div>
 
   <script type="module">
@@ -975,6 +1092,73 @@
       renderSavedList();
       applyModeVisibility();
     });
+
+    // ---------------------------------------------------------------------
+    // DRAGGABLE PANELS
+    // ---------------------------------------------------------------------
+    function makeDraggable(panelEl, handleEl) {
+      let isDragging = false;
+      let startX, startY, startLeft, startTop;
+
+      // Initialise position from CSS (top/right) -> convert to top/left
+      function initPosition() {
+        const wrap = panelEl.parentElement;
+        const wrapRect = wrap.getBoundingClientRect();
+        const panelRect = panelEl.getBoundingClientRect();
+        panelEl.style.right = "";
+        panelEl.style.left = (panelRect.left - wrapRect.left) + "px";
+        panelEl.style.top  = (panelRect.top  - wrapRect.top)  + "px";
+      }
+
+      handleEl.addEventListener("mousedown", (e) => {
+        // Ignore clicks on the collapse button
+        if (e.target.closest(".collapse-btn")) return;
+        if (!panelEl.dataset.positioned) {
+          initPosition();
+          panelEl.dataset.positioned = "1";
+        }
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startLeft = parseInt(panelEl.style.left, 10) || 0;
+        startTop  = parseInt(panelEl.style.top,  10) || 0;
+        panelEl.classList.add("dragging");
+        e.preventDefault();
+      });
+
+      document.addEventListener("mousemove", (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const wrap = panelEl.parentElement;
+        const maxLeft = wrap.clientWidth  - panelEl.offsetWidth;
+        const maxTop  = wrap.clientHeight - panelEl.offsetHeight;
+        const newLeft = Math.max(0, Math.min(maxLeft, startLeft + dx));
+        const newTop  = Math.max(0, Math.min(maxTop,  startTop  + dy));
+        panelEl.style.left = newLeft + "px";
+        panelEl.style.top  = newTop  + "px";
+      });
+
+      document.addEventListener("mouseup", () => {
+        if (!isDragging) return;
+        isDragging = false;
+        panelEl.classList.remove("dragging");
+      });
+    }
+
+    // Collapse / expand toggle
+    document.querySelectorAll(".collapse-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetId = btn.dataset.target;
+        const body = document.getElementById(targetId);
+        const collapsed = body.classList.toggle("collapsed");
+        btn.textContent = collapsed ? "▼" : "▲";
+        btn.title = collapsed ? "Expand" : "Collapse";
+      });
+    });
+
+    makeDraggable(document.getElementById("panel-route"), document.getElementById("drag-route"));
+    makeDraggable(document.getElementById("panel-saved"), document.getElementById("drag-saved"));
 
   </script>
 
