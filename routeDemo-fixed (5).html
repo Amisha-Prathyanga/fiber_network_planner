@@ -1,0 +1,983 @@
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>ArcGIS Maps SDK for JavaScript: Fibre Path Routing, Saving & Nearest FDP</title>
+
+  <script>
+    var esriConfig = {
+      apiKey: "AAPTanERBo6fbFejrowb8k-reIA..uyF4uakmSvGQcVUAovd_pAiKntBvXsFCt1HaIdoaLVvzQeJsBDCWzSs398JUFdmeEXjExyHXlrRxnbY_p2bz0xqmugw6t0qUlB3qf4_D-2hDoDFFfN0dcqywCisHPpwWgQXQOt0HNBKjuTRB1WaykR-HOCHSjI-_kXNKCKHBP8eUkC5_616Yk2MnbL1guyXQiXkuHbHIqtSCm3mxyCJAQ_Bb2UDbbEnJmE0VYq8Vqh3-jDWqD34.AT1_NSvr2EvX",
+    };
+  </script>
+
+  <!-- Load the ArcGIS Maps SDK for JavaScript from CDN -->
+  <script type="module" src="https://js.arcgis.com/5.1/"></script>
+
+  <style>
+    :root {
+      --fibre-primary: #0e6ba8;
+      --fibre-primary-dark: #0a4d7a;
+      --fibre-accent: #f0973d;
+      --fibre-surface: #ffffff;
+      --fibre-surface-muted: #f4f8fb;
+      --fibre-border: #dee7ec;
+      --fibre-text: #16333f;
+      --fibre-text-muted: #61808c;
+      --fibre-radius: 14px;
+      --fibre-radius-sm: 8px;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      color: var(--fibre-text);
+    }
+
+    /* ---------------------------------------------------------------------
+       PANEL SIZING — forced with !important.
+       Neither calcite-panel had its own width, so any child without an
+       explicit width (#saveForm, .footer-row, .mode-row) stretched to
+       whatever size the panel happened to be — that's what made the
+       "Save this path" button balloon. A plain `width` rule here can
+       still lose to sizing the Maps SDK applies at runtime to slotted
+       UI-corner components, so it's forced with !important to guarantee
+       it actually wins. Every child below then sizes to 100% of this
+       fixed parent instead of guessing its own vw width.
+       --------------------------------------------------------------------- */
+    calcite-panel[slot="top-right"],
+    calcite-panel[slot="bottom-right"] {
+      /* Theme via real Calcite design tokens — cascades to every
+         descendant control (buttons, switches, lists) automatically. */
+      --calcite-color-brand: var(--fibre-primary);
+      --calcite-color-brand-hover: var(--fibre-primary-dark);
+      --calcite-color-brand-press: var(--fibre-primary-dark);
+      --calcite-color-foreground-1: var(--fibre-surface);
+      --calcite-color-foreground-2: var(--fibre-surface-muted);
+      --calcite-color-text-1: var(--fibre-text);
+      --calcite-color-text-2: var(--fibre-text-muted);
+      --calcite-color-border-1: var(--fibre-border);
+      --calcite-color-border-2: var(--fibre-border);
+      width: 380px !important;
+      max-width: 92vw !important;
+      flex: 0 0 auto !important;
+      border-radius: var(--fibre-radius);
+      box-shadow: 0 14px 34px rgba(10, 40, 60, 0.22);
+      margin: 6px;
+    }
+
+    /* Only the two independently-scrolling lists get a height cap +
+       scrollbar — never the panel itself, so nothing gets silently
+       clipped off the bottom. */
+    #directions-container {
+      max-height: 24vh;
+      width: 100%;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+
+    #directions-notice {
+      max-width: 100%;
+    }
+
+    calcite-panel [slot="header-actions-start"] {
+      color: var(--fibre-primary);
+      margin-inline-end: 2px;
+    }
+
+    .mode-row {
+      padding: 14px 16px 10px;
+      background: var(--fibre-surface-muted);
+      border-bottom: 1px solid var(--fibre-border);
+    }
+
+    #saveForm {
+      padding: 14px 16px 16px;
+      display: none;
+      border-top: 1px solid var(--fibre-border);
+      margin-top: 6px;
+      background: var(--fibre-surface-muted);
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    #saveForm calcite-label {
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    #nearestFdpPanel {
+      display: none;
+      padding: 12px 16px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    #nearestFdpResult {
+      font-size: 13px;
+      background: var(--fibre-surface-muted);
+      border: 1px solid var(--fibre-border);
+      border-radius: var(--fibre-radius-sm);
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+
+    #nearestFdpResult .headline {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--fibre-primary-dark);
+    }
+
+    #nearestFdpDistance {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      background: linear-gradient(135deg, #eaf4ff, #dbeeff);
+      border: 1px solid #a9d4ff;
+      border-radius: var(--fibre-radius-sm);
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+
+    #nearestFdpDistance .distance-value {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--fibre-primary);
+      line-height: 1;
+    }
+
+    #nearestFdpDistance .distance-label {
+      font-size: 12px;
+      color: var(--fibre-text-muted);
+    }
+
+    #saveNearestBtn {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .hint {
+      font-size: 11.5px;
+      color: var(--fibre-text-muted);
+      padding: 0 16px 10px;
+      line-height: 1.5;
+    }
+
+    #networkStats {
+      padding: 8px 16px 12px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--fibre-primary-dark);
+      background: var(--fibre-surface-muted);
+      border-bottom: 1px solid var(--fibre-border);
+    }
+
+    #savedList,
+    #fdpRankList {
+      max-height: 26vh;
+      overflow-y: auto;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .footer-row {
+      display: flex;
+      gap: 10px;
+      padding: 14px 16px;
+      border-top: 1px solid var(--fibre-border);
+    }
+
+    .footer-row calcite-button {
+      flex: 1;
+    }
+
+    /* ---------------------------------------------------------------------
+       APP HEADER — a real title bar above the map, instead of the map
+       filling the whole viewport with no branding/context.
+       --------------------------------------------------------------------- */
+    html,
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .app-header {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: 64px;
+      padding: 0 22px;
+      background: linear-gradient(120deg, var(--fibre-primary-dark), var(--fibre-primary));
+      color: #ffffff;
+      box-shadow: 0 2px 10px rgba(6, 30, 46, 0.35);
+      z-index: 20;
+      position: relative;
+    }
+
+    .app-header calcite-icon {
+      color: #ffffff;
+      flex: 0 0 auto;
+    }
+
+    .app-header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    .app-header p {
+      font-size: 12px;
+      margin: 2px 0 0;
+      color: rgba(255, 255, 255, 0.82);
+      font-weight: 400;
+    }
+
+    .map-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      position: relative;
+    }
+
+    arcgis-map {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Small color legend for cable types, shown in the saved-network panel */
+    #cableLegend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      padding: 10px 16px 4px;
+      font-size: 12px;
+      color: var(--fibre-text-muted);
+    }
+
+    #cableLegend .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #cableLegend .legend-swatch {
+      width: 16px;
+      height: 4px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <header class="app-header">
+    <calcite-icon icon="pin-tear" scale="l"></calcite-icon>
+    <div>
+      <h1>Fibre Network Planner</h1>
+      <p>Plan, compare, and save fibre paths across Colombo</p>
+    </div>
+  </header>
+
+  <div class="map-wrap">
+  <arcgis-map basemap="arcgis/navigation" center="79.858, 6.893" zoom="13">
+
+    <arcgis-search slot="top-left"></arcgis-search>
+    <arcgis-zoom slot="top-left"></arcgis-zoom>
+    <arcgis-locate slot="top-left"></arcgis-locate>
+    <arcgis-compass slot="top-left"></arcgis-compass>
+
+    <arcgis-expand slot="bottom-left" expand-icon="basemap" expand-tooltip="Change basemap">
+      <arcgis-basemap-gallery></arcgis-basemap-gallery>
+    </arcgis-expand>
+    <arcgis-fullscreen slot="bottom-left"></arcgis-fullscreen>
+
+    <calcite-panel slot="top-right" heading="Route a fibre path" width-scale="m"
+      description="Click the map to trace, compare, and save fibre paths across your network."
+      collapsible>
+      <calcite-icon slot="header-actions-start" icon="pin-tear" scale="m"></calcite-icon>
+
+      <div class="mode-row">
+        <calcite-segmented-control id="modeControl" width="full">
+          <calcite-segmented-control-item value="two-point" icon-start="pin-plus" checked>Two-point</calcite-segmented-control-item>
+          <calcite-segmented-control-item value="multi-stop" icon-start="collection">Multi-stop</calcite-segmented-control-item>
+          <calcite-segmented-control-item value="nearest-fdp" icon-start="search">Nearest FDP</calcite-segmented-control-item>
+        </calcite-segmented-control>
+      </div>
+
+      <calcite-notice id="directions-notice" icon="driving-distance" open>
+        <div slot="message">Click on the map in two different locations to solve the route.</div>
+      </calcite-notice>
+
+      <calcite-button id="solveMultiBtn" width="full" style="display:none; margin: 0 12px 8px; width: calc(100% - 24px);" disabled>
+        Solve optimized route (0 stops)
+      </calcite-button>
+
+      <div id="directions-container"></div>
+
+      <div id="nearestFdpPanel">
+        <div id="nearestFdpDistance" style="display:none;">
+          <span class="distance-value" id="nearestFdpDistanceValue"></span>
+          <span class="distance-label">to nearest FDP</span>
+        </div>
+        <div id="nearestFdpResult"></div>
+        <calcite-list id="fdpRankList"></calcite-list>
+        <calcite-button id="saveNearestBtn" width="full" style="display:none; margin-top:8px;">Save nearest path to network</calcite-button>
+      </div>
+
+      <div id="saveForm">
+        <calcite-label>
+          Label
+          <calcite-input id="pathLabel" placeholder="e.g. Fort–Bambalapitiya trunk"></calcite-input>
+        </calcite-label>
+        <calcite-label>
+          Cable type
+          <calcite-select id="pathType">
+            <calcite-option value="backbone">Backbone</calcite-option>
+            <calcite-option value="distribution" selected>Distribution</calcite-option>
+            <calcite-option value="drop">Drop</calcite-option>
+          </calcite-select>
+        </calcite-label>
+        <calcite-button id="saveRouteBtn" width="full">Save this path to the network</calcite-button>
+      </div>
+
+      <div class="footer-row">
+        <calcite-button id="clearBtn" appearance="outline">Clear current</calcite-button>
+      </div>
+
+    </calcite-panel>
+
+    <calcite-panel slot="bottom-right" heading="Saved fibre network" width-scale="m"
+      description="Review, export, import, or clear the paths you've already saved."
+      collapsible>
+      <calcite-icon slot="header-actions-start" icon="layers" scale="m"></calcite-icon>
+      <calcite-action slot="header-actions-end" icon="download" text="Export" id="exportBtn"></calcite-action>
+      <calcite-action slot="header-actions-end" icon="upload" text="Import" id="importBtn"></calcite-action>
+      <input type="file" id="importFile" accept="application/json" style="display:none;">
+
+      <div class="mode-row">
+        <calcite-label layout="inline">
+          <calcite-switch id="showSavedSwitch" checked></calcite-switch>
+          Show saved network on map
+        </calcite-label>
+        <calcite-label layout="inline">
+          <calcite-switch id="showFdpSwitch" checked></calcite-switch>
+          Show sample FDPs on map
+        </calcite-label>
+      </div>
+
+      <div id="networkStats">0 paths saved · 0.00 mi total</div>
+      <calcite-list id="savedList"></calcite-list>
+
+      <div class="footer-row">
+        <calcite-button id="clearAllBtn" appearance="outline" kind="danger">Clear saved network</calcite-button>
+      </div>
+    </calcite-panel>
+
+  </arcgis-map>
+  </div>
+
+  <script type="module">
+
+    const [
+      Graphic, route, RouteParameters, closestFacility, ClosestFacilityParameters,
+      FeatureSet, SimpleLineSymbol, SimpleMarkerSymbol, PictureMarkerSymbol, GraphicsLayer, Polyline, geometryEngine,
+      webMercatorUtils,
+    ] = await $arcgis.import([
+      "@arcgis/core/Graphic.js",
+      "@arcgis/core/rest/route.js",
+      "@arcgis/core/rest/support/RouteParameters.js",
+      "@arcgis/core/rest/closestFacility.js",
+      "@arcgis/core/rest/support/ClosestFacilityParameters.js",
+      "@arcgis/core/rest/support/FeatureSet.js",
+      "@arcgis/core/symbols/SimpleLineSymbol.js",
+      "@arcgis/core/symbols/SimpleMarkerSymbol.js",
+      "@arcgis/core/symbols/PictureMarkerSymbol.js",
+      "@arcgis/core/layers/GraphicsLayer.js",
+      "@arcgis/core/geometry/Polyline.js",
+      "@arcgis/core/geometry/geometryEngine.js",
+      "@arcgis/core/geometry/support/webMercatorUtils.js",
+    ]);
+
+    const routeUrl = "https://route-api.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World";
+    const closestFacilityUrl = "https://route-api.arcgis.com/arcgis/rest/services/World/ClosestFacility/NAServer/ClosestFacility_World";
+    const STORAGE_KEY = "arcgis-fibre-saved-paths";
+
+    // ---------------------------------------------------------------------
+    // TRAVEL MODE — a fibre path follows road geometry, but it is not a
+    // vehicle: it shouldn't be forced along one-way streets, restricted
+    // turns, or U-turn rules the way a car route is. The service's default
+    // travel mode is "Driving", which respects all of those. Instead we
+    // look up a non-vehicle mode (typically "Walking Distance") from the
+    // service's supported travel modes — it still snaps to the same road
+    // network, but treats every street as traversable in both directions
+    // and ignores turn restrictions, which matches how a physical cable
+    // is actually laid along a road corridor.
+    // ---------------------------------------------------------------------
+    let fibreTravelMode = null;
+    try {
+      const serviceDescription = await route.fetchServiceDescription(routeUrl);
+      const modes = serviceDescription.supportedTravelModes || [];
+      fibreTravelMode =
+        modes.find((m) => /walk/i.test(m.name)) ||
+        modes.find((m) => /^Rural Driving Distance$/i.test(m.name)) ||
+        null;
+    } catch (e) {
+      console.warn("Could not load non-vehicle travel mode; falling back to service default (driving).", e);
+    }
+
+    // ---------------------------------------------------------------------
+    // SAMPLE FIBRE DISTRIBUTION POINTS (FDPs) — Colombo
+    // Illustrative coordinates for demo purposes, not surveyed positions.
+    // ---------------------------------------------------------------------
+    const sampleFDPs = [
+      { id: "fdp1", name: "Fort FDP",          lat: 6.9330, lng: 79.8440 },
+      { id: "fdp2", name: "Kollupitiya FDP",   lat: 6.9130, lng: 79.8480 },
+      { id: "fdp3", name: "Bambalapitiya FDP", lat: 6.8930, lng: 79.8580 },
+      { id: "fdp4", name: "Wellawatte FDP",    lat: 6.8740, lng: 79.8615 },
+      { id: "fdp5", name: "Dehiwala FDP",      lat: 6.8500, lng: 79.8670 },
+      { id: "fdp6", name: "Mount Lavinia FDP", lat: 6.8300, lng: 79.8630 },
+    ];
+
+    const viewElement = document.querySelector("arcgis-map");
+    const notice = document.querySelector("#directions-notice");
+    const noticeMessage = () => notice.querySelector("[slot=message]");
+    const modeControl = document.querySelector("#modeControl");
+    const solveMultiBtn = document.querySelector("#solveMultiBtn");
+    const saveForm = document.querySelector("#saveForm");
+    const directionsContainer = document.querySelector("#directions-container");
+    const nearestFdpPanel = document.querySelector("#nearestFdpPanel");
+    const nearestFdpResultEl = document.querySelector("#nearestFdpResult");
+    const nearestFdpDistanceEl = document.querySelector("#nearestFdpDistance");
+    const nearestFdpDistanceValueEl = document.querySelector("#nearestFdpDistanceValue");
+    const fdpRankListEl = document.querySelector("#fdpRankList");
+    const saveNearestBtn = document.querySelector("#saveNearestBtn");
+    const showSavedSwitch = document.querySelector("#showSavedSwitch");
+    const showFdpSwitch = document.querySelector("#showFdpSwitch");
+    const savedListEl = document.querySelector("#savedList");
+    const networkStatsEl = document.querySelector("#networkStats");
+
+    // ---------------------------------------------------------------------
+    // STATE
+    // ---------------------------------------------------------------------
+    let currentMode = "two-point"; // "two-point" | "multi-stop" | "nearest-fdp"
+    let stopGraphics = [];         // markers for the route currently being built (two-point / multi-stop)
+    let lastRouteResult = null;    // pending two-point/multi-stop save
+    let lastNearestFdpResult = null; // pending nearest-FDP save
+    let savedPaths = [];           // persisted saved fibre paths
+
+    const savedLayer = new GraphicsLayer({ title: "Saved fibre network" });
+    const fdpLayer = new GraphicsLayer({ title: "Sample FDPs" });
+    const nearestFdpLayer = new GraphicsLayer({ title: "Nearest FDP routes" });
+
+    function uid(prefix) { return prefix + "_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7); }
+
+    // ---------------------------------------------------------------------
+    // PERSISTENCE — browser localStorage (standalone file, no backend).
+    // LIMITATION: per-browser/per-computer only. Use Export / Import to pass
+    // the saved network between colleagues, or swap these two functions for
+    // a real shared backend later — nothing else in the app needs to change.
+    // ---------------------------------------------------------------------
+    function loadSaved() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        savedPaths = raw ? JSON.parse(raw) : [];
+      } catch (e) { savedPaths = []; }
+    }
+    function persistSaved() {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedPaths)); }
+      catch (e) { alert("Could not save path: " + (e.message || e)); }
+    }
+
+    // ---------------------------------------------------------------------
+    // SYMBOLS
+    // ---------------------------------------------------------------------
+    function symbolForType(type) {
+      // Vivid, high-contrast colors — the previous "drop" color (pale
+      // grey-blue) was nearly invisible against the basemap. These three
+      // are saturated and distinct from each other and from the blue used
+      // for an in-progress route, so saved paths are always easy to spot.
+      const colors = { backbone: [49, 46, 129], distribution: [5, 150, 105], drop: [219, 39, 119] };
+      const widths = { backbone: 5, distribution: 4, drop: 3.5 };
+      return new SimpleLineSymbol({ color: colors[type] || colors.distribution, width: widths[type] || 3 });
+    }
+
+    // ---------------------------------------------------------------------
+    // SAMPLE FDP LAYER
+    // ---------------------------------------------------------------------
+    const fdpGraphics = sampleFDPs.map((fdp) => new Graphic({
+      geometry: { type: "point", longitude: fdp.lng, latitude: fdp.lat, spatialReference: { wkid: 4326 } },
+      attributes: { Name: fdp.name, ObjectID: fdp.id },
+    }));
+
+    // Self-contained SVG "signal node" icon for FDPs — no external image file needed.
+    function fdpIconDataUri() {
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">' +
+        '<circle cx="32" cy="32" r="29" fill="#D98E3F" stroke="#0F2F38" stroke-width="3"/>' +
+        '<g stroke="#ffffff" stroke-width="3.2" fill="none" stroke-linecap="round">' +
+        '<path d="M32 45 L32 31"/>' +
+        '<path d="M20 35 Q26 25 32 31 Q38 25 44 35"/>' +
+        '<path d="M13 27 Q23 11 32 21 Q41 11 51 27"/>' +
+        '</g>' +
+        '<circle cx="32" cy="47" r="3.5" fill="#ffffff"/>' +
+        '</svg>';
+      return "data:image/svg+xml;base64," + btoa(svg);
+    }
+    const fdpIconSymbol = new PictureMarkerSymbol({
+      url: fdpIconDataUri(),
+      width: "30px",
+      height: "30px",
+    });
+
+    function renderFdpLayer() {
+      fdpLayer.removeAll();
+      if (!showFdpSwitch.checked) return;
+      sampleFDPs.forEach((fdp, i) => {
+        fdpLayer.add(new Graphic({
+          geometry: { type: "point", longitude: fdp.lng, latitude: fdp.lat, spatialReference: { wkid: 4326 } },
+          symbol: fdpIconSymbol,
+          attributes: { name: fdp.name },
+          popupTemplate: { title: "{name}", content: "Fibre Distribution Point" },
+        }));
+      });
+    }
+    showFdpSwitch.addEventListener("calciteSwitchChange", renderFdpLayer);
+
+    // ---------------------------------------------------------------------
+    // SAVED NETWORK: render + list
+    // ---------------------------------------------------------------------
+    function renderSavedLayer() {
+      savedLayer.removeAll();
+      if (!showSavedSwitch.checked) return;
+      savedPaths.forEach((p) => {
+        savedLayer.add(new Graphic({
+          geometry: new Polyline(p.geometry),
+          symbol: symbolForType(p.type),
+        }));
+      });
+    }
+
+    function renderSavedList() {
+      savedListEl.innerHTML = "";
+      savedPaths.forEach((p) => {
+        const item = document.createElement("calcite-list-item");
+        item.label = p.label;
+        item.description = `${p.type} · ${p.lengthMiles != null ? p.lengthMiles.toFixed(2) + " mi" : "—"}` +
+          (p.optimized ? " · optimized" : "");
+        const delAction = document.createElement("calcite-action");
+        delAction.slot = "actions-end";
+        delAction.icon = "trash";
+        delAction.text = "Delete";
+        delAction.addEventListener("click", () => deleteSavedPath(p.id));
+        item.appendChild(delAction);
+        savedListEl.appendChild(item);
+      });
+      const total = savedPaths.reduce((sum, p) => sum + (p.lengthMiles || 0), 0);
+      networkStatsEl.innerText = `${savedPaths.length} path${savedPaths.length === 1 ? "" : "s"} saved · ${total.toFixed(2)} mi total`;
+    }
+
+    function deleteSavedPath(id) {
+      savedPaths = savedPaths.filter((p) => p.id !== id);
+      persistSaved();
+      renderSavedLayer();
+      renderSavedList();
+    }
+
+    function saveNetworkPath({ label, type, lengthMiles, stopsUsed, optimized, geometryJSON }) {
+      savedPaths.push({
+        id: uid("path"),
+        label, type, lengthMiles,
+        stopsUsed: stopsUsed || 2,
+        optimized: !!optimized,
+        geometry: geometryJSON,
+        createdAt: new Date().toISOString(),
+      });
+      persistSaved();
+      renderSavedLayer();
+      renderSavedList();
+    }
+
+    // ---------------------------------------------------------------------
+    // WORKSPACE (current pins / route / results) — shared reset across modes
+    // ---------------------------------------------------------------------
+    function resetWorkspace() {
+      viewElement.view.graphics.removeAll();
+      nearestFdpLayer.removeAll();
+      stopGraphics = [];
+      lastRouteResult = null;
+      lastNearestFdpResult = null;
+      directionsContainer.innerHTML = "";
+      saveForm.style.display = "none";
+      nearestFdpResultEl.innerHTML = "";
+      fdpRankListEl.innerHTML = "";
+      nearestFdpDistanceEl.style.display = "none";
+      saveNearestBtn.style.display = "none";
+      notice.open = true;
+      updateMultiStopButton();
+    }
+
+    function updateMultiStopButton() {
+      if (currentMode === "multi-stop") {
+        solveMultiBtn.style.display = "block";
+        solveMultiBtn.innerText = `Solve optimized route (${stopGraphics.length} stop${stopGraphics.length === 1 ? "" : "s"})`;
+        solveMultiBtn.disabled = stopGraphics.length < 2;
+      } else {
+        solveMultiBtn.style.display = "none";
+      }
+    }
+
+    function applyModeVisibility() {
+      directionsContainer.style.display = currentMode === "nearest-fdp" ? "none" : "block";
+      nearestFdpPanel.style.display = currentMode === "nearest-fdp" ? "block" : "none";
+      updateMultiStopButton();
+    }
+
+    modeControl.addEventListener("calciteSegmentedControlChange", (e) => {
+      currentMode = e.target.value;
+      resetWorkspace();
+      applyModeVisibility();
+      noticeMessage().innerText =
+        currentMode === "two-point" ? "Click on the map in two different locations to solve the route." :
+        currentMode === "multi-stop" ? "Multi-stop mode: click the map to add several stops. The first stop is the fixed starting hub — the rest are reordered for the shortest total route." :
+        "Nearest FDP mode: click a customer location. We'll route to every sample FDP and highlight the nearest one.";
+      notice.open = true;
+    });
+
+    showSavedSwitch.addEventListener("calciteSwitchChange", renderSavedLayer);
+
+    // ---------------------------------------------------------------------
+    // TWO-POINT / MULTI-STOP: pins
+    // ---------------------------------------------------------------------
+    function addStopGraphic(point) {
+      const marker = new Graphic({
+        geometry: point,
+        symbol: new SimpleMarkerSymbol({
+          color: stopGraphics.length === 0 ? "white" : "black",
+          size: "8px",
+          outline: { color: [5, 150, 255], width: 1 },
+        }),
+      });
+      viewElement.view.graphics.add(marker);
+      stopGraphics.push(marker);
+    }
+
+    // ---------------------------------------------------------------------
+    // MAP CLICK HANDLING — branches by mode
+    // ---------------------------------------------------------------------
+    viewElement.addEventListener("arcgisViewClick", (event) => {
+      const point = event.detail.mapPoint;
+
+      if (currentMode === "nearest-fdp") {
+        viewElement.view.graphics.removeAll();
+        nearestFdpLayer.removeAll();
+        nearestFdpResultEl.innerHTML = "";
+        fdpRankListEl.innerHTML = "";
+        nearestFdpDistanceEl.style.display = "none";
+        saveNearestBtn.style.display = "none";
+        const customerGraphic = new Graphic({
+          geometry: point,
+          symbol: new SimpleMarkerSymbol({ color: [220, 20, 60], size: "10px", outline: { color: "white", width: 1 } }),
+        });
+        viewElement.view.graphics.add(customerGraphic);
+        notice.open = false;
+        solveClosestFacility(point);
+        return;
+      }
+
+      if (currentMode === "multi-stop") {
+        addStopGraphic(point);
+        updateMultiStopButton();
+        return;
+      }
+
+      // two-point mode
+      if (stopGraphics.length === 0) {
+        addStopGraphic(point);
+      } else if (stopGraphics.length === 1) {
+        notice.open = false;
+        addStopGraphic(point);
+        solveRoute(false);
+      } else {
+        resetWorkspace();
+        addStopGraphic(point);
+      }
+    });
+
+    solveMultiBtn.addEventListener("click", () => solveRoute(true));
+
+    // ---------------------------------------------------------------------
+    // ROUTE SOLVING (two-point / multi-stop) — Esri Route service
+    // ---------------------------------------------------------------------
+    function sumDirectionsLength(directions) {
+      if (!directions || !directions.features) return null;
+      return directions.features.reduce((sum, f) => sum + (f.attributes.length || 0), 0);
+    }
+
+    function renderDirectionsList(directions) {
+      directionsContainer.innerHTML = "";
+      if (!directions || !directions.features) return;
+      const list = document.createElement("calcite-list");
+      directions.features.forEach((feature, index) => {
+        const item = document.createElement("calcite-list-item");
+        const step = document.createElement("span");
+        step.innerText = `${index + 1}.`;
+        step.slot = "content-start";
+        step.style.marginLeft = "10px";
+        item.appendChild(step);
+        item.label = `${feature.attributes.text}`;
+        item.description = `${feature.attributes.length.toFixed(2)} miles`;
+        list.appendChild(item);
+      });
+      directionsContainer.appendChild(list);
+    }
+
+    async function solveRoute(useOptimizedOrder) {
+      const routeParams = new RouteParameters({
+        stops: new FeatureSet({ features: stopGraphics }),
+        returnDirections: true,
+        findBestSequence: useOptimizedOrder,
+        preserveFirstStop: useOptimizedOrder,
+        ...(fibreTravelMode ? { travelMode: fibreTravelMode } : {}),
+      });
+
+      try {
+        const response = await route.solve(routeUrl, routeParams);
+
+        response.routeResults.forEach((result) => {
+          result.route.symbol = new SimpleLineSymbol({ color: [5, 150, 255], width: 3 });
+          viewElement.view.graphics.add(result.route);
+
+          lastRouteResult = {
+            geometry: result.route.geometry.toJSON(),
+            lengthMiles: sumDirectionsLength(result.directions),
+            stopsUsed: stopGraphics.length,
+            optimized: useOptimizedOrder,
+          };
+        });
+
+        if (response.routeResults.length > 0) {
+          renderDirectionsList(response.routeResults[0].directions);
+        }
+
+        if (lastRouteResult) {
+          saveForm.style.display = "block";
+        }
+      } catch (error) {
+        console.log(error);
+        alert("Route service error: " + (error.message || error));
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // NEAREST FDP — Esri Closest Facility service
+    // Ranks every sample FDP by real network distance from the clicked
+    // customer point; draws every route (faint) and highlights rank #1.
+    // ---------------------------------------------------------------------
+    function routeLength(routeFeature) {
+      if (routeFeature.attributes && routeFeature.attributes.Total_Miles != null) {
+        return routeFeature.attributes.Total_Miles;
+      }
+      try { return geometryEngine.geodesicLength(routeFeature.geometry, "miles"); }
+      catch (e) { return null; }
+    }
+
+    async function solveClosestFacility(point) {
+      // The click point comes in the view's spatial reference (Web Mercator).
+      // The sample FDPs were built in WGS84 (wkid 4326). Mixing the two without
+      // an explicit, matching spatialReference on each FeatureSet is what causes
+      // the routing service to reject the request with:
+      // "The input points are not all located within a single region."
+      // So we normalize the incident to WGS84 before building the request.
+      const geoPoint = point.spatialReference && point.spatialReference.isWGS84
+        ? point
+        : webMercatorUtils.webMercatorToGeographic(point);
+
+      const incidentGraphic = new Graphic({ geometry: geoPoint });
+      const cfParams = new ClosestFacilityParameters({
+        incidents: new FeatureSet({
+          features: [incidentGraphic],
+          spatialReference: { wkid: 4326 },
+        }),
+        facilities: new FeatureSet({
+          features: fdpGraphics,
+          spatialReference: { wkid: 4326 },
+        }),
+        defaultTargetFacilityCount: fdpGraphics.length, // return ALL FDPs, ranked
+        returnRoutes: true,
+        outputLines: "true-shape", // real street-network path, not a straight line
+        ...(fibreTravelMode ? { travelMode: fibreTravelMode } : {}),
+      });
+
+      try {
+        const result = await closestFacility.solve(closestFacilityUrl, cfParams);
+        let routesArr = Array.isArray(result.routes) ? result.routes
+          : (result.routes && typeof result.routes.toArray === "function") ? result.routes.toArray()
+          : (result.routes && result.routes.features) ? result.routes.features
+          : [];
+
+        routesArr = routesArr.slice().sort((a, b) => (a.attributes.FacilityRank || 0) - (b.attributes.FacilityRank || 0));
+        renderClosestFacilityResult(routesArr);
+      } catch (error) {
+        console.log(error);
+        const detail = (error.details && error.details.join(", ")) || error.message || error;
+        alert("Closest facility service error: " + detail);
+      }
+    }
+
+    function renderClosestFacilityResult(routesArr) {
+      nearestFdpLayer.removeAll();
+      fdpRankListEl.innerHTML = "";
+
+      if (!routesArr.length) {
+        nearestFdpResultEl.innerHTML = "No reachable FDP found for this location.";
+        nearestFdpDistanceEl.style.display = "none";
+        return;
+      }
+
+      routesArr.forEach((r, i) => {
+        const isNearest = i === 0;
+        nearestFdpLayer.add(new Graphic({
+          geometry: r.geometry,
+          symbol: new SimpleLineSymbol({
+            color: isNearest ? [5, 150, 255, 0.95] : [140, 180, 210, 0.4],
+            width: isNearest ? 5 : 2,
+          }),
+        }));
+
+        const miles = routeLength(r);
+        const item = document.createElement("calcite-list-item");
+        item.label = `${i + 1}. ${(r.attributes && r.attributes.Name) || "FDP"}`;
+        item.description = (miles != null ? miles.toFixed(2) + " mi" : "distance unavailable") + (isNearest ? " — nearest / optimized" : "");
+        fdpRankListEl.appendChild(item);
+      });
+
+      const nearest = routesArr[0];
+      const nearestMiles = routeLength(nearest);
+      const nearestName = (nearest.attributes && nearest.attributes.Name) || "Nearest FDP";
+
+      if (nearestMiles != null) {
+        nearestFdpDistanceValueEl.innerText = nearestMiles.toFixed(2) + " mi";
+        nearestFdpDistanceEl.style.display = "flex";
+      } else {
+        nearestFdpDistanceEl.style.display = "none";
+      }
+
+      nearestFdpResultEl.innerHTML = `<div class="headline">${nearestName}</div>
+        <div style="margin-top:4px; color: var(--calcite-color-text-2);">${routesArr.length} FDPs compared — every path is drawn in blue; the nearest is highlighted.</div>`;
+
+      lastNearestFdpResult = {
+        facilityName: nearestName,
+        lengthMiles: nearestMiles,
+        geometryJSON: typeof nearest.geometry.toJSON === "function" ? nearest.geometry.toJSON() : nearest.geometry,
+      };
+      saveNearestBtn.style.display = "block";
+    }
+
+    saveNearestBtn.addEventListener("click", () => {
+      if (!lastNearestFdpResult) return;
+      saveNetworkPath({
+        label: `${lastNearestFdpResult.facilityName} → customer`,
+        type: "drop",
+        lengthMiles: lastNearestFdpResult.lengthMiles,
+        stopsUsed: 2,
+        optimized: true,
+        geometryJSON: lastNearestFdpResult.geometryJSON,
+      });
+      resetWorkspace();
+    });
+
+    // ---------------------------------------------------------------------
+    // SAVE (two-point / multi-stop) / CLEAR
+    // ---------------------------------------------------------------------
+    document.querySelector("#saveRouteBtn").addEventListener("click", () => {
+      if (!lastRouteResult) return;
+      const label = document.querySelector("#pathLabel").value.trim() ||
+        (lastRouteResult.optimized ? "Optimized multi-stop path" : "Point-to-point path");
+      const type = document.querySelector("#pathType").value;
+      saveNetworkPath({
+        label, type,
+        lengthMiles: lastRouteResult.lengthMiles,
+        stopsUsed: lastRouteResult.stopsUsed,
+        optimized: lastRouteResult.optimized,
+        geometryJSON: lastRouteResult.geometry,
+      });
+      document.querySelector("#pathLabel").value = "";
+      resetWorkspace();
+    });
+
+    document.querySelector("#clearBtn").addEventListener("click", resetWorkspace);
+
+    document.querySelector("#clearAllBtn").addEventListener("click", () => {
+      if (!confirm("Delete all saved fibre paths from this browser? This cannot be undone unless you have an export.")) return;
+      savedPaths = [];
+      persistSaved();
+      renderSavedLayer();
+      renderSavedList();
+    });
+
+    // ---------------------------------------------------------------------
+    // EXPORT / IMPORT (manual sharing between colleagues; no shared backend)
+    // ---------------------------------------------------------------------
+    document.querySelector("#exportBtn").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify({ savedPaths, exportedAt: new Date().toISOString() }, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "fibre-network-export-" + new Date().toISOString().slice(0, 10) + ".json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.querySelector("#importBtn").addEventListener("click", () => {
+      document.querySelector("#importFile").click();
+    });
+
+    document.querySelector("#importFile").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!Array.isArray(data.savedPaths)) throw new Error("File does not look like a valid network export.");
+        const merge = confirm("Click OK to MERGE this file into your current saved network, or Cancel to REPLACE it.");
+        if (merge) {
+          const existingIds = new Set(savedPaths.map((p) => p.id));
+          data.savedPaths.forEach((p) => { if (!existingIds.has(p.id)) savedPaths.push(p); });
+        } else {
+          savedPaths = data.savedPaths;
+        }
+        persistSaved();
+        renderSavedLayer();
+        renderSavedList();
+        alert("Import complete: " + savedPaths.length + " saved paths.");
+      } catch (err) {
+        alert("Could not import file: " + (err.message || err));
+      } finally {
+        e.target.value = "";
+      }
+    });
+
+    // ---------------------------------------------------------------------
+    // INIT — wait for the view to be ready before touching viewElement.view
+    // ---------------------------------------------------------------------
+    viewElement.addEventListener("arcgisViewReadyChange", (event) => {
+      if (!event.target.ready) return;
+      viewElement.view.map.addMany([fdpLayer, savedLayer, nearestFdpLayer]);
+      loadSaved();
+      renderFdpLayer();
+      renderSavedLayer();
+      renderSavedList();
+      applyModeVisibility();
+    });
+
+  </script>
+
+</body>
+
+</html>
