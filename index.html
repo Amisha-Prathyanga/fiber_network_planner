@@ -337,6 +337,57 @@
       font-weight: 400;
     }
 
+    .saved-toggle-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      color: #ffffff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(8px);
+      margin-left: auto;
+    }
+
+    .saved-toggle-pill:hover {
+      background: rgba(255, 255, 255, 0.28);
+      border-color: rgba(255, 255, 255, 0.6);
+      transform: translateY(-1px);
+    }
+
+    .saved-toggle-pill .badge {
+      background: var(--fibre-accent);
+      color: #ffffff;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+      line-height: 1;
+    }
+
+    .floating-panel .close-btn {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.85);
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 6px;
+      font-size: 16px;
+      line-height: 1;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+
+    .floating-panel .close-btn:hover {
+      background: rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+    }
+
     .map-wrap {
       flex: 1 1 auto;
       min-height: 0;
@@ -383,6 +434,11 @@
       <h1>Fibre Network Planner</h1>
       <p>Plan, compare, and save fibre paths across Colombo</p>
     </div>
+    <button id="openSavedPanelBtn" class="saved-toggle-pill" title="Click to open saved fibre network window">
+      <calcite-icon icon="folder" scale="s"></calcite-icon>
+      <span>Saved Network</span>
+      <span id="savedBadgeCount" class="badge">0</span>
+    </button>
   </header>
 
   <div class="map-wrap">
@@ -411,14 +467,14 @@
         <calcite-panel heading="" width-scale="m">
           <div class="mode-row">
             <calcite-segmented-control id="modeControl" width="full">
-              <calcite-segmented-control-item value="two-point" icon-start="pin-plus" checked>Two-point</calcite-segmented-control-item>
-              <calcite-segmented-control-item value="multi-stop" icon-start="collection">Multi-stop</calcite-segmented-control-item>
-              <calcite-segmented-control-item value="nearest-fdp" icon-start="search">Nearest FDP</calcite-segmented-control-item>
+              <calcite-segmented-control-item value="nearest-fdp" icon-start="search" checked>Nearest FDP</calcite-segmented-control-item>
+              <calcite-segmented-control-item value="two-point" icon-start="pin-plus" disabled>Two-point</calcite-segmented-control-item>
+              <calcite-segmented-control-item value="multi-stop" icon-start="collection" disabled>Multi-stop</calcite-segmented-control-item>
             </calcite-segmented-control>
           </div>
 
           <calcite-notice id="directions-notice" icon="driving-distance" open>
-            <div slot="message">Click on the map in two different locations to solve the route.</div>
+            <div slot="message">Nearest FDP mode: click a customer location. We'll route to every sample FDP and highlight the nearest one.</div>
           </calcite-notice>
 
           <calcite-button id="solveMultiBtn" width="full" style="display:none; margin: 0 12px 8px; width: calc(100% - 24px);" disabled>
@@ -461,7 +517,7 @@
     </div>
 
     <!-- ===== Floating Draggable Panel: Saved fibre network ===== -->
-    <div class="floating-panel" id="panel-saved">
+    <div class="floating-panel" id="panel-saved" style="display: none;">
       <div class="drag-handle" id="drag-saved">
         <span class="drag-icon">⠿</span>
         <div class="panel-title-text">
@@ -469,6 +525,7 @@
           <span>Review, export, import, or clear saved paths.</span>
         </div>
         <button class="collapse-btn" data-target="body-saved" title="Collapse">▲</button>
+        <button class="close-btn" id="close-saved-btn" title="Close window">✕</button>
       </div>
       <div class="panel-body" id="body-saved">
         <calcite-panel heading="" width-scale="m">
@@ -582,7 +639,7 @@
     // ---------------------------------------------------------------------
     // STATE
     // ---------------------------------------------------------------------
-    let currentMode = "two-point"; // "two-point" | "multi-stop" | "nearest-fdp"
+    let currentMode = "nearest-fdp"; // "two-point" | "multi-stop" | "nearest-fdp"
     let stopGraphics = [];         // markers for the route currently being built (two-point / multi-stop)
     let lastRouteResult = null;    // pending two-point/multi-stop save
     let lastNearestFdpResult = null; // pending nearest-FDP save
@@ -697,6 +754,8 @@
       });
       const total = savedPaths.reduce((sum, p) => sum + (p.lengthMiles || 0), 0);
       networkStatsEl.innerText = `${savedPaths.length} path${savedPaths.length === 1 ? "" : "s"} saved · ${total.toFixed(2)} mi total`;
+      const badge = document.querySelector("#savedBadgeCount");
+      if (badge) badge.innerText = savedPaths.length;
     }
 
     function deleteSavedPath(id) {
@@ -718,6 +777,7 @@
       persistSaved();
       renderSavedLayer();
       renderSavedList();
+      document.getElementById("panel-saved").style.display = "block";
     }
 
     // ---------------------------------------------------------------------
@@ -1159,6 +1219,24 @@
 
     makeDraggable(document.getElementById("panel-route"), document.getElementById("drag-route"));
     makeDraggable(document.getElementById("panel-saved"), document.getElementById("drag-saved"));
+
+    // Toggle saved network panel visibility
+    const panelSaved = document.getElementById("panel-saved");
+    const openSavedPanelBtn = document.getElementById("openSavedPanelBtn");
+    const closeSavedBtn = document.getElementById("close-saved-btn");
+
+    if (openSavedPanelBtn) {
+      openSavedPanelBtn.addEventListener("click", () => {
+        const isHidden = panelSaved.style.display === "none" || !panelSaved.style.display;
+        panelSaved.style.display = isHidden ? "block" : "none";
+      });
+    }
+
+    if (closeSavedBtn) {
+      closeSavedBtn.addEventListener("click", () => {
+        panelSaved.style.display = "none";
+      });
+    }
 
   </script>
 
