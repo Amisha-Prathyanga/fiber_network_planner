@@ -7,7 +7,7 @@
 
   <script>
     var esriConfig = {
-      apiKey: "AAPTanERBo6fbFejrowb8k-reIA..uyF4uakmSvGQcVUAovd_pAiKntBvXsFCt1HaIdoaLVvzQeJsBDCWzSs398JUFdmeEXjExyHXlrRxnbY_p2bz0xqmugw6t0qUlB3qf4_D-2hDoDFFfN0dcqywCisHPpwWgQXQOt0HNBKjuTRB1WaykR-HOCHSjI-_kXNKCKHBP8eUkC5_616Yk2MnbL1guyXQiXkuHbHIqtSCm3mxyCJAQ_Bb2UDbbEnJmE0VYq8Vqh3-jDWqD34.AT1_NSvr2EvX",
+      apiKey: "AAPTaS2XT0YKClwtoSy88x0XXow..C-JZUJ3TDD-S5xAYetR03VaS4cSHtl9IlFvTWzCu6i9QkmUo9ElnAeeGkYc0eMsEc9i0ZALvQyl1QWQatDfQPhIZtwO_YDd6nURYGz3D0JNJkRY2QLZ3YA9INI6RI9pm0-5qxS0-yZ5bHCT-cQYFHzodGbQi4hKKJswT7TPTblZJl4H7q88hBZ7ywlzlFL8ep8s4O8vsGvrj4h9YG9gjxNW7Bfa1S5v_y3PrvB3vWKwLkI2bIHHwDD93_D3t2A..AT1_wN3Z0zij",
     };
   </script>
 
@@ -86,7 +86,7 @@
       font-size: 13px;
       font-weight: 700;
       letter-spacing: 0.01em;
-      box-shadow: inset 0 -1px 0 rgba(0,0,0,0.12);
+      box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
     }
 
     .floating-panel .drag-handle:active {
@@ -121,7 +121,7 @@
     .floating-panel .collapse-btn {
       background: none;
       border: none;
-      color: rgba(255,255,255,0.85);
+      color: rgba(255, 255, 255, 0.85);
       cursor: pointer;
       padding: 4px 6px;
       border-radius: 6px;
@@ -130,16 +130,24 @@
       transition: background 0.15s;
       flex-shrink: 0;
     }
+
     .floating-panel .collapse-btn:hover {
-      background: rgba(255,255,255,0.18);
+      background: rgba(255, 255, 255, 0.18);
     }
 
     .floating-panel .panel-body.collapsed {
       display: none;
     }
 
-    #panel-route { top: 10px; right: 10px; }
-    #panel-saved { top: 10px; right: 410px; }
+    #panel-route {
+      top: 10px;
+      right: 10px;
+    }
+
+    #panel-saved {
+      top: 10px;
+      right: 410px;
+    }
 
     /* Only the two independently-scrolling lists get a height cap +
        scrollbar — never the panel itself, so nothing gets silently
@@ -197,7 +205,8 @@
       padding: 12px 16px 4px;
       width: 100%;
       box-sizing: border-box;
-      flex: 0 0 auto;        /* never grow or shrink inside the panel flex column */
+      flex: 0 0 auto;
+      /* never grow or shrink inside the panel flex column */
     }
 
     #nearestFdpResult {
@@ -241,7 +250,8 @@
 
     #saveNearestBtn {
       display: block;
-      width: calc(100% - 32px) !important;  /* match the 16px padding on each side */
+      width: calc(100% - 32px) !important;
+      /* match the 16px padding on each side */
       margin: 0 16px 12px !important;
       max-height: 2.5rem !important;
       height: 2.5rem !important;
@@ -286,8 +296,10 @@
       padding: 12px 16px;
       border-top: 2px solid var(--fibre-border);
       background: var(--fibre-surface);
-      flex: 0 0 auto;    /* never let footer shrink or be pushed off-screen */
-      margin-top: auto;  /* push to the natural bottom of flow */
+      flex: 0 0 auto;
+      /* never let footer shrink or be pushed off-screen */
+      margin-top: auto;
+      /* push to the natural bottom of flow */
     }
 
     .footer-row calcite-button {
@@ -467,17 +479,22 @@
         <calcite-panel heading="" width-scale="m">
           <div class="mode-row">
             <calcite-segmented-control id="modeControl" width="full">
-              <calcite-segmented-control-item value="nearest-fdp" icon-start="search" checked>Nearest FDP</calcite-segmented-control-item>
-              <calcite-segmented-control-item value="two-point" icon-start="pin-plus" disabled>Two-point</calcite-segmented-control-item>
-              <calcite-segmented-control-item value="multi-stop" icon-start="collection" disabled>Multi-stop</calcite-segmented-control-item>
+              <calcite-segmented-control-item value="nearest-fdp" icon-start="search" checked>Nearest
+                FDP</calcite-segmented-control-item>
+              <calcite-segmented-control-item value="two-point" icon-start="pin-plus"
+                disabled>Two-point</calcite-segmented-control-item>
+              <calcite-segmented-control-item value="multi-stop" icon-start="collection"
+                disabled>Multi-stop</calcite-segmented-control-item>
             </calcite-segmented-control>
           </div>
 
           <calcite-notice id="directions-notice" icon="driving-distance" open>
-            <div slot="message">Nearest FDP mode: click a customer location. We'll route to every sample FDP and highlight the nearest one.</div>
+            <div slot="message">Nearest FDP mode: click a customer location. We'll route to every sample FDP and
+              highlight the nearest one.</div>
           </calcite-notice>
 
-          <calcite-button id="solveMultiBtn" width="full" style="display:none; margin: 0 12px 8px; width: calc(100% - 24px);" disabled>
+          <calcite-button id="solveMultiBtn" width="full"
+            style="display:none; margin: 0 12px 8px; width: calc(100% - 24px);" disabled>
             Solve optimized route (0 stops)
           </calcite-button>
 
@@ -490,7 +507,8 @@
             </div>
             <div id="nearestFdpResult"></div>
             <calcite-list id="fdpRankList"></calcite-list>
-            <calcite-button id="saveNearestBtn" style="display:none; margin-top:8px;">Save nearest path to network</calcite-button>
+            <calcite-button id="saveNearestBtn" style="display:none; margin-top:8px;">Save nearest path to
+              network</calcite-button>
           </div>
 
           <div id="saveForm">
@@ -610,11 +628,11 @@
     // Illustrative coordinates for demo purposes, not surveyed positions.
     // ---------------------------------------------------------------------
     const sampleFDPs = [
-      { id: "fdp1", name: "Fort FDP",          lat: 6.9330, lng: 79.8440 },
-      { id: "fdp2", name: "Kollupitiya FDP",   lat: 6.9130, lng: 79.8480 },
+      { id: "fdp1", name: "Fort FDP", lat: 6.9330, lng: 79.8440 },
+      { id: "fdp2", name: "Kollupitiya FDP", lat: 6.9130, lng: 79.8480 },
       { id: "fdp3", name: "Bambalapitiya FDP", lat: 6.8930, lng: 79.8580 },
-      { id: "fdp4", name: "Wellawatte FDP",    lat: 6.8740, lng: 79.8615 },
-      { id: "fdp5", name: "Dehiwala FDP",      lat: 6.8500, lng: 79.8670 },
+      { id: "fdp4", name: "Wellawatte FDP", lat: 6.8740, lng: 79.8615 },
+      { id: "fdp5", name: "Dehiwala FDP", lat: 6.8500, lng: 79.8670 },
       { id: "fdp6", name: "Mount Lavinia FDP", lat: 6.8300, lng: 79.8630 },
     ];
 
@@ -821,8 +839,8 @@
       applyModeVisibility();
       noticeMessage().innerText =
         currentMode === "two-point" ? "Click on the map in two different locations to solve the route." :
-        currentMode === "multi-stop" ? "Multi-stop mode: click the map to add several stops. The first stop is the fixed starting hub — the rest are reordered for the shortest total route." :
-        "Nearest FDP mode: click a customer location. We'll route to every sample FDP and highlight the nearest one.";
+          currentMode === "multi-stop" ? "Multi-stop mode: click the map to add several stops. The first stop is the fixed starting hub — the rest are reordered for the shortest total route." :
+            "Nearest FDP mode: click a customer location. We'll route to every sample FDP and highlight the nearest one.";
       notice.open = true;
     });
 
@@ -995,8 +1013,8 @@
         const result = await closestFacility.solve(closestFacilityUrl, cfParams);
         let routesArr = Array.isArray(result.routes) ? result.routes
           : (result.routes && typeof result.routes.toArray === "function") ? result.routes.toArray()
-          : (result.routes && result.routes.features) ? result.routes.features
-          : [];
+            : (result.routes && result.routes.features) ? result.routes.features
+              : [];
 
         routesArr = routesArr.slice().sort((a, b) => (a.attributes.FacilityRank || 0) - (b.attributes.FacilityRank || 0));
         renderClosestFacilityResult(routesArr);
@@ -1167,7 +1185,7 @@
         const panelRect = panelEl.getBoundingClientRect();
         panelEl.style.right = "";
         panelEl.style.left = (panelRect.left - wrapRect.left) + "px";
-        panelEl.style.top  = (panelRect.top  - wrapRect.top)  + "px";
+        panelEl.style.top = (panelRect.top - wrapRect.top) + "px";
       }
 
       handleEl.addEventListener("mousedown", (e) => {
@@ -1181,7 +1199,7 @@
         startX = e.clientX;
         startY = e.clientY;
         startLeft = parseInt(panelEl.style.left, 10) || 0;
-        startTop  = parseInt(panelEl.style.top,  10) || 0;
+        startTop = parseInt(panelEl.style.top, 10) || 0;
         panelEl.classList.add("dragging");
         e.preventDefault();
       });
@@ -1191,12 +1209,12 @@
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
         const wrap = panelEl.parentElement;
-        const maxLeft = wrap.clientWidth  - panelEl.offsetWidth;
-        const maxTop  = wrap.clientHeight - panelEl.offsetHeight;
+        const maxLeft = wrap.clientWidth - panelEl.offsetWidth;
+        const maxTop = wrap.clientHeight - panelEl.offsetHeight;
         const newLeft = Math.max(0, Math.min(maxLeft, startLeft + dx));
-        const newTop  = Math.max(0, Math.min(maxTop,  startTop  + dy));
+        const newTop = Math.max(0, Math.min(maxTop, startTop + dy));
         panelEl.style.left = newLeft + "px";
-        panelEl.style.top  = newTop  + "px";
+        panelEl.style.top = newTop + "px";
       });
 
       document.addEventListener("mouseup", () => {
